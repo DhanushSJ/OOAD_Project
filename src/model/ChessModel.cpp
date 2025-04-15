@@ -1,8 +1,6 @@
-#include <iostream>
 #include <cctype>
 #include <cmath>
 #include <algorithm> 
-#include <stdexcept>
 #include <vector>
 #include <QDebug>   
 

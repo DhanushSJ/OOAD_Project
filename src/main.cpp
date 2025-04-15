@@ -1,8 +1,8 @@
-#include <QApplication> // Qt Application entry point
-#include "gui/MainWindow.h"   // Our main window class
-#include "model/ChessModel.h"   // Include model for console mode
-#include "gui/ChessView.h"    // Include view for console mode
-#include "controller/ChessController.h" // Include controller for console mode
+#include <QApplication> 
+#include "gui/MainWindow.h" 
+#include "model/ChessModel.h"   
+#include "gui/ChessView.h" 
+#include "controller/ChessController.h" 
 #include <iostream>
 #include <string>
 #include <vector>

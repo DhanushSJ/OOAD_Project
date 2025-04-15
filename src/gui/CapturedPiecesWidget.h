@@ -3,9 +3,9 @@
 
 #include <QWidget>
 #include <vector>
-#include "model/pieces/Piece.h"
 #include "model/ChessModel.h"
 
+class Piece;
 class QPaintEvent;
 class QPainter;
 
@@ -26,6 +26,7 @@ protected:
 private:
     const ChessModel* chessModel;
     bool showWhiteCaptures;
+    void resizeEvent(QResizeEvent *event);
 
 };
 

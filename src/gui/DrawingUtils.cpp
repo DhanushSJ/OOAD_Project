@@ -3,10 +3,8 @@
 #include "Constants.h" 
 
 #include <QFont>
-#include <QFontMetrics>
 #include <QPainterPath>
 #include <QPainterPathStroker>
-#include <QTransform>
 
 namespace ChessDrawingUtils {
 

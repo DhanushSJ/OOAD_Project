@@ -34,7 +34,7 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     setWindowTitle(tr("Chess"));
-    resize(850, 650); 
+    resize(890, 650); 
 
     // Menu Bar
     QMenuBar *menuBar = this->menuBar();
@@ -64,16 +64,16 @@ void MainWindow::setupUi()
 
     blackCapturedWidget = new CapturedPiecesWidget(chessModel, false, sidePanelWidget);
     blackCapturedWidget->setToolTip("Pieces captured by White"); 
-    blackCapturedWidget->setMinimumHeight(40);
+    blackCapturedWidget->setMinimumHeight(130);
 
     moveHistoryWidget = new QListWidget(sidePanelWidget);
     moveHistoryWidget->setAlternatingRowColors(true);
-    moveHistoryWidget->setMaximumWidth(180);
+    moveHistoryWidget->setMaximumWidth(220);
     moveHistoryWidget->setMinimumWidth(120);
 
     whiteCapturedWidget = new CapturedPiecesWidget(chessModel, true, sidePanelWidget);
     whiteCapturedWidget->setToolTip("Pieces captured by Black"); 
-    whiteCapturedWidget->setMinimumHeight(40);
+    whiteCapturedWidget->setMinimumHeight(130);
 
     statusLabel = new QLabel("Status", sidePanelWidget);
     statusLabel->setAlignment(Qt::AlignCenter);

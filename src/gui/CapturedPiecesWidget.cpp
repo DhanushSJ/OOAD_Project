@@ -1,34 +1,34 @@
 #include "CapturedPiecesWidget.h"
-#include "Constants.h"
 #include "DrawingUtils.h"
 #include <QPainter>
 #include <QPaintEvent>
-#include <QPainterPath>
-#include <QPainterPathStroker>
-#include <QFont>
+#include <QSize>
+#include <QWidget>
+#include <vector>
 
-CapturedPiecesWidget::CapturedPiecesWidget(const ChessModel* model, bool showWhiteCaptures, QWidget *parent)
+CapturedPiecesWidget::CapturedPiecesWidget(const ChessModel* model, bool showWhiteCaptures, QWidget *parent) 
     : QWidget(parent), chessModel(model), showWhiteCaptures(showWhiteCaptures)
 {}
 
 CapturedPiecesWidget::~CapturedPiecesWidget() {}
 
-QSize CapturedPiecesWidget::minimumSizeHint() const
-{
-    // Suggest a minimum width to hold a few pieces and a minimum height for one row
-    int pieceSize = 25;
-    return QSize(pieceSize * 4, pieceSize + 10);
+QSize CapturedPiecesWidget::minimumSizeHint() const {
+    const int pieceSize = 20;
+    const int rows = 3;
+    const int cols = 5;
+    const int spacing = 4;
+    return QSize(cols * pieceSize + (cols - 1) * spacing, rows * pieceSize + (rows - 1) * spacing);
 }
 
-QSize CapturedPiecesWidget::sizeHint() const
-{
-    // Suggest a size that can comfortably hold maybe 8 pieces in width
-    int pieceSize = 30; 
-    return QSize(pieceSize * 8 + 20, pieceSize + 20);
+QSize CapturedPiecesWidget::sizeHint() const {
+    const int pieceSize = 25;
+    const int rows = 3;
+    const int cols = 5;
+    const int spacing = 5;
+    return QSize(cols * pieceSize + (cols - 1) * spacing, rows * pieceSize + (rows - 1) * spacing);
 }
 
-void CapturedPiecesWidget::paintEvent(QPaintEvent *event)
-{
+void CapturedPiecesWidget::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     if (!chessModel) return;
 
@@ -36,24 +36,27 @@ void CapturedPiecesWidget::paintEvent(QPaintEvent *event)
     painter.setRenderHint(QPainter::Antialiasing);
     const std::vector<Piece*>& capturedPieces = chessModel->getCapturedPieces(showWhiteCaptures);
 
-    // Calculate layout
-    int availableWidth = width() - 10; 
-    int pieceSize = qMin(height() * ChessConstants::CAPTURED_PIECE_SIZE_FACTOR, 35.0); 
-    pieceSize = qMax(pieceSize, 10); 
-    int spacing = pieceSize / 5;
-    int x = 5; 
-    int y = 5; 
+    const int maxCols = 5;
+    const int spacing = 5;
+    const int pieceSize = qMin(35, qMax(20, height() / 3 - spacing));
+    const int maxRows = 3;
 
-    if (availableWidth < pieceSize) return; 
+    int startX = (width() - (maxCols * pieceSize + (maxCols - 1) * spacing)) / 2;
+    int startY = (height() - (maxRows * pieceSize + (maxRows - 1) * spacing)) / 2;
 
-    for (Piece* piece : capturedPieces) {
-        if (x + pieceSize > width() - 5) { 
-            x = 5;
-            y += pieceSize + spacing;
-            if (y + pieceSize > height() - 5) break; 
-        }
+    for (size_t i = 0; i < capturedPieces.size() && i < maxCols * maxRows; ++i) {
+        int row = i / maxCols;
+        int col = i % maxCols;
+
+        int x = startX + col * (pieceSize + spacing);
+        int y = startY + row * (pieceSize + spacing);
+
         QRect pieceRect(x, y, pieceSize, pieceSize);
-        ChessDrawingUtils::drawPiece(painter, piece, pieceRect, pieceSize);
-        x += pieceSize + spacing;
+        ChessDrawingUtils::drawPiece(painter, capturedPieces[i], pieceRect, pieceSize);
     }
+}
+
+void CapturedPiecesWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    update(); // Redraw on resize
 }
