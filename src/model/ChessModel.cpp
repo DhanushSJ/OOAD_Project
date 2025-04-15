@@ -137,7 +137,7 @@ void ChessModel::setupFromFEN(const std::string& fen) {
     } else if (i < fen.length()) {
         i++; // Skip the '-'
     }
-
+    
     updateCurrentValidMoves();
 }
 
@@ -446,20 +446,31 @@ Position ChessModel::findKing(bool white) const {
     return {-1, -1};
 }
 
-bool ChessModel::isSquareAttacked(Position pos, bool white) const {
+bool ChessModel::isSquareAttacked(Position pos, bool byWhite) const {
     if (!pos.isValid()) return false;
 
-    // Check if any opponent piece can attack the king    
     for (int row = 0; row < 8; row++) {
         for (int col = 0; col < 8; col++) {
             Piece* piece = getPiece(row, col);
-            if (piece != nullptr && piece->isWhite != white) {
-                std::vector<Position> moves = piece->getPossibleMoves(Position(row, col), this);
-                for (Position& move : moves) {
-                    if (move.row == pos.row && move.col == pos.col) {
-                        return true;
+            if (piece && piece->isWhite == byWhite) {
+                if (piece->type == 'P') {
+                    int dir = piece->isWhite ? 1 : -1;
+                    if (pos.row == row + dir && (pos.col == col + 1 || pos.col == col - 1)) {
+                         return true;
                     }
-                }
+                } else if (piece->type == 'K') {
+                     int dr = abs(row - pos.row); int dc = abs(col - pos.col);
+                     if (dr <= 1 && dc <= 1) {
+                         return true;
+                     }
+                 } else {
+                    std::vector<Position> moves = piece->getPossibleMoves(Position(row, col), this);
+                    for (Position& move : moves) {
+                        if (move.row == pos.row && move.col == pos.col) {
+                            return true;
+                        }
+                    }
+                 }
             }
         }
     }
@@ -469,5 +480,5 @@ bool ChessModel::isSquareAttacked(Position pos, bool white) const {
 bool ChessModel::isInCheck() const {
      Position kingPos = findKing(whiteToMove);
      if (!kingPos.isValid()) return false;
-     return isSquareAttacked(kingPos, whiteToMove);
+     return isSquareAttacked(kingPos, !whiteToMove);
 }

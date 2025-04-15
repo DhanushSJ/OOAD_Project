@@ -27,7 +27,6 @@ private:
     const ChessModel* chessModel;
     bool showWhiteCaptures;
 
-    void drawCapturedPiece(QPainter& painter, Piece* piece, const QRect& targetRect, int pieceSize);
 };
 
 #endif

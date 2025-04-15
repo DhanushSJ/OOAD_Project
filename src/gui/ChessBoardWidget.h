@@ -55,7 +55,6 @@ private:
     Position dragIndicatorSource = {-1, -1};
 
     void startDrag();
-    void drawPiece(QPainter& painter, Piece* piece, const QRect& targetRect, int sSize);
 };
 
 #endif

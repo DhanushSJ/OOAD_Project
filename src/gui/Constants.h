@@ -12,6 +12,11 @@ namespace ChessConstants {
     inline constexpr qreal  PIECE_BORDER_THICKNESS = 2.5;
     inline constexpr qreal  CAPTURED_PIECE_SIZE_FACTOR = 0.6;
 
+    inline const QColor LIGHT_SQUARE_COLOR = QColor(238, 238, 210);
+    inline const QColor DARK_SQUARE_COLOR = QColor(118, 150, 86);
+    inline const QColor SELECTION_HIGHLIGHT_COLOR = QColor(255, 255, 0, 100);
+    inline const QColor MOVE_INDICATOR_COLOR = QColor(0, 0, 0, 70);
+
     inline const QMap<char, QChar> PIECE_UNICODE_MAP = {
         { 'K', QChar(0x265A) }, { 'Q', QChar(0x265B) }, { 'R', QChar(0x265C) },
         { 'B', QChar(0x265D) }, { 'N', QChar(0x265E) }, { 'P', QChar(0x265F) }

@@ -5,8 +5,6 @@ project(ChessQt LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17) # Use C++17 standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON) # Automatically run Meta-Object Compiler for Q_OBJECT
-set(CMAKE_AUTORCC ON) # Automatically run Resource Compiler (if needed later)
-set(CMAKE_AUTOUIC ON) # Automatically run UI Compiler (if needed later)
 
 # Find the Qt6 package and its components
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
@@ -17,7 +15,8 @@ set(PROJECT_SOURCES
     # GUI
     src/gui/CapturedPiecesWidget.cpp
     src/gui/ChessBoardWidget.cpp
-    src/gui/ChessView.cpp          # Path updated based on tree
+    src/gui/ChessView.cpp       
+    src/gui/DrawingUtils.cpp   
     src/gui/MainWindow.cpp
     # Model
     src/model/ChessModel.cpp
@@ -43,7 +42,8 @@ set(PROJECT_HEADERS
     src/gui/CapturedPiecesWidget.h
     src/gui/ChessBoardWidget.h
     src/gui/ChessView.h        
-    src/gui/Constants.h        
+    src/gui/Constants.h     
+    src/gui/DrawingUtils.h   
     src/gui/MainWindow.h
     # Model
     src/model/ChessModel.h

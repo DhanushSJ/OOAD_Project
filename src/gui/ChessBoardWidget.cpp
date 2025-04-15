@@ -4,6 +4,7 @@
 #include "core/Utils.h"
 #include "model/ChessModel.h"
 #include "Constants.h"
+#include "DrawingUtils.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -19,15 +20,6 @@
 #include <QFontMetrics>
 #include <vector>
 #include <algorithm>
-
-// Color constants
-const QColor lightSquareColor = QColor(238, 238, 210);
-const QColor darkSquareColor = QColor(118, 150, 86);
-const QColor whitePieceColor = QColor(248, 248, 248);
-const QColor blackPieceColor = QColor(86, 83, 82);
-const QColor pieceBorderColor = QColor(70, 70, 70);
-const QColor selectionHighlightColor = QColor(255, 255, 0, 100);
-const QColor moveIndicatorColor = QColor(0, 0, 0, 70);
 
 ChessBoardWidget::ChessBoardWidget(ChessModel* model, QWidget *parent)
     : QWidget(parent), chessModel(model), selectedSquare{-1, -1}, dragIndicatorSource{-1, -1}
@@ -70,35 +62,6 @@ void ChessBoardWidget::resetInteractionState(bool doUpdate) {
     if (doUpdate) update();
 }
 
-void ChessBoardWidget::drawPiece(QPainter& painter, Piece* piece, const QRect& targetRect, int sSize) {
-    if (!piece || targetRect.isNull() || sSize <= 0) return;
-
-    QChar pieceChar = ChessConstants::PIECE_UNICODE_MAP.value(piece->type, '?');
-    painter.setFont(QFont("Arial Unicode MS", sSize * 0.6));
-    QFontMetrics fm(painter.font());
-    
-    // Calculate text positioning
-    QPainterPath textPath;
-    textPath.addText(0, 0, painter.font(), pieceChar);
-    QRectF textBounds = textPath.boundingRect();
-    qreal dx = targetRect.left() + (targetRect.width() - textBounds.width())/2 - textBounds.left();
-    qreal dy = targetRect.top() + (targetRect.height() - textBounds.height())/2 - textBounds.top();
-    textPath.translate(dx, dy);
-
-    // Create border effect
-    QPainterPathStroker stroker;
-    stroker.setWidth(ChessConstants::PIECE_BORDER_THICKNESS);
-    stroker.setCapStyle(Qt::RoundCap);
-    stroker.setJoinStyle(Qt::RoundJoin);
-    QPainterPath borderPath = stroker.createStroke(textPath);
-
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(pieceBorderColor);
-    painter.drawPath(borderPath);
-    painter.setBrush(piece->isWhite ? whitePieceColor : blackPieceColor);
-    painter.drawPath(textPath);
-}
-
 void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
@@ -109,14 +72,14 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     // Draw chessboard squares
     for (int row = 0; row < 8; ++row) {
         for (int col = 0; col < 8; ++col) {
-            painter.setBrush((row + col) % 2 ? darkSquareColor : lightSquareColor);
+            painter.setBrush((row + col) % 2 ? ChessConstants::DARK_SQUARE_COLOR : ChessConstants::LIGHT_SQUARE_COLOR);
             painter.drawRect(squareRect({row, col}));
         }
     }
 
     // Highlight selected square
     if (selectedSquare.isValid()) {
-        painter.setBrush(selectionHighlightColor);
+        painter.setBrush(ChessConstants::SELECTION_HIGHLIGHT_COLOR);
         painter.drawRect(squareRect(selectedSquare));
     }
 
@@ -129,7 +92,7 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
                 continue;
     
             if (Piece* piece = chessModel->getPiece(row, col)) {
-                drawPiece(painter, piece, squareRect(currentPos), sSize);
+                ChessDrawingUtils::drawPiece(painter, piece, squareRect(currentPos), sSize);
             }
         }
     }
@@ -140,8 +103,9 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     if (indicatorPos.isValid()) {
         std::vector<Position> validMoves = chessModel->getValidMoves(indicatorPos);
         Piece* sourcePiece = chessModel->getPiece(indicatorPos.row, indicatorPos.col);
-        if (sourcePiece && sourcePiece->isWhite == chessModel->isWhiteToMove()) {        \
-            painter.setBrush(moveIndicatorColor);
+        if (sourcePiece && sourcePiece->isWhite == chessModel->isWhiteToMove()) { 
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(ChessConstants::MOVE_INDICATOR_COLOR);
             int radius = sSize / 7;
             for (const auto& move : chessModel->getValidMoves(indicatorPos)) {
                 painter.drawEllipse(squareRect(move).center(), radius, radius);
@@ -157,7 +121,7 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     // File letters (a-h)
     for (int col = 0; col < 8; ++col) {
         bool dark = (0 + col) % 2;
-        painter.setPen(dark ? lightSquareColor : darkSquareColor);
+        painter.setPen(dark ? ChessConstants::LIGHT_SQUARE_COLOR : ChessConstants::DARK_SQUARE_COLOR);
         QString file = QString(QChar::fromLatin1('a' + col));
         QRect square = squareRect({0, col});
         painter.drawText(square.right() - fm.horizontalAdvance(file) - padding, 
@@ -167,7 +131,7 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     // Rank numbers (1-8)
     for (int row = 0; row < 8; ++row) {
         bool dark = (row + 0) % 2;
-        painter.setPen(dark ? lightSquareColor : darkSquareColor);
+        painter.setPen(dark ? ChessConstants::LIGHT_SQUARE_COLOR : ChessConstants::DARK_SQUARE_COLOR);
         QString rank = QString::number(row + 1);
         QRect square = squareRect({row, 0});
         painter.drawText(square.left() + padding, square.top() + fm.ascent() + padding, rank);
@@ -302,7 +266,7 @@ void ChessBoardWidget::startDrag() {
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
-    drawPiece(painter, piece, pixmap.rect(), sSize);
+    ChessDrawingUtils::drawPiece(painter, piece, pixmap.rect(), sSize);
 
     drag->setPixmap(pixmap);
     drag->setHotSpot(QPoint(sSize / 2, sSize / 2));

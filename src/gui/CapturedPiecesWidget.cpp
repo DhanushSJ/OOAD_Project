@@ -1,12 +1,11 @@
 #include "CapturedPiecesWidget.h"
 #include "Constants.h"
+#include "DrawingUtils.h"
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QPainterPathStroker>
 #include <QFont>
-#include <QColor>
-#include <QDebug>
 
 CapturedPiecesWidget::CapturedPiecesWidget(const ChessModel* model, bool showWhiteCaptures, QWidget *parent)
     : QWidget(parent), chessModel(model), showWhiteCaptures(showWhiteCaptures)
@@ -27,38 +26,6 @@ QSize CapturedPiecesWidget::sizeHint() const
     int pieceSize = 30; 
     return QSize(pieceSize * 8 + 20, pieceSize + 20);
 }
-
-
-void CapturedPiecesWidget::drawCapturedPiece(QPainter& painter, Piece* piece, const QRect& targetRect, int pieceSize)
-{
-     if (!piece || targetRect.isNull() || pieceSize <= 0) return;
-
-    QChar pieceChar = ChessConstants::PIECE_UNICODE_MAP.value(piece->type, '?');
-    QString pieceText = QString(pieceChar);
-    painter.setFont(QFont("Arial Unicode MS", pieceSize * 0.6));
-    QFont currentFont = painter.font();
-
-    QPainterPath textPath;
-    textPath.addText(0, 0, currentFont, pieceText);
-    QRectF textBoundingRect = textPath.boundingRect();
-    qreal dx = targetRect.left() + (targetRect.width() - textBoundingRect.width()) / 2.0 - textBoundingRect.left();
-    qreal dy = targetRect.top() + (targetRect.height() - textBoundingRect.height()) / 2.0 - textBoundingRect.top();
-    QTransform matrix; matrix.translate(dx, dy);
-    textPath = matrix.map(textPath);
-
-    QPainterPathStroker stroker;
-    stroker.setWidth(ChessConstants::PIECE_BORDER_THICKNESS);
-    stroker.setCapStyle(Qt::RoundCap);
-    stroker.setJoinStyle(Qt::RoundJoin);
-    QPainterPath borderPath = stroker.createStroke(textPath);
-
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(ChessConstants::PIECE_BORDER_COLOR);
-    painter.drawPath(borderPath);
-    painter.setBrush(piece->isWhite ? ChessConstants::WHITE_PIECE_COLOR : ChessConstants::BLACK_PIECE_COLOR);
-    painter.drawPath(textPath);
-}
-
 
 void CapturedPiecesWidget::paintEvent(QPaintEvent *event)
 {
@@ -86,7 +53,7 @@ void CapturedPiecesWidget::paintEvent(QPaintEvent *event)
             if (y + pieceSize > height() - 5) break; 
         }
         QRect pieceRect(x, y, pieceSize, pieceSize);
-        drawCapturedPiece(painter, piece, pieceRect, pieceSize);
+        ChessDrawingUtils::drawPiece(painter, piece, pieceRect, pieceSize);
         x += pieceSize + spacing;
     }
 }
