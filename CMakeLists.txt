@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON) # Automatically run Meta-Object Compiler for Q_OBJECT
 
 # Find the Qt6 package and its components
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Sql)
 
 # Define source files with their new paths
 set(PROJECT_SOURCES
@@ -18,10 +18,12 @@ set(PROJECT_SOURCES
     src/gui/ChessView.cpp       
     src/gui/DrawingUtils.cpp   
     src/gui/MainWindow.cpp
+    src/gui/WelcomeDialog.cpp
     # Model
     src/model/ChessModel.cpp
     src/model/Move.cpp
     src/model/Position.cpp
+    src/model/DatabaseManager.cpp 
     # Model/Pieces
     src/model/pieces/Bishop.cpp
     src/model/pieces/King.cpp
@@ -45,10 +47,12 @@ set(PROJECT_HEADERS
     src/gui/Constants.h     
     src/gui/DrawingUtils.h   
     src/gui/MainWindow.h
+    src/gui/WelcomeDialog.h
     # Model
     src/model/ChessModel.h
     src/model/Move.h
     src/model/Position.h
+    src/model/DatabaseManager.h
     # Model/Pieces
     src/model/pieces/Bishop.h
     src/model/pieces/King.h
@@ -75,7 +79,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 # === Link Libraries ===
 # Link the executable against the required Qt modules
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql)
 
 # === Installation ===
 # Optional: Install executable to a 'bin' directory relative to CMAKE_INSTALL_PREFIX

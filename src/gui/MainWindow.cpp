@@ -1,27 +1,44 @@
 #include "gui/MainWindow.h"
+#include "gui/WelcomeDialog.h"
 #include "ChessBoardWidget.h"
 #include "model/ChessModel.h"
-#include "CapturedPiecesWidget.h" 
+#include "CapturedPiecesWidget.h"
 #include "core/Utils.h"
+#include "model/DatabaseManager.h"
+
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QDialogButtonBox>
+#include <QHeaderView>
+#include <QAbstractItemView>
+#include <QDateTime>
 
 #include <QApplication>
 #include <QWidget>
-#include <QVBoxLayout>
-#include <QHBoxLayout> 
-#include <QSplitter>   
-#include <QListWidget> 
+#include <QHBoxLayout>
+#include <QSplitter>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QLabel>
 #include <QStatusBar>
 #include <QMenuBar>
 #include <QAction>
 #include <QDebug>
-#include <QSpacerItem> 
+#include <QSpacerItem>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), fullMoveNumber(1) 
+    : QMainWindow(parent), fullMoveNumber(1), halfMoveClock(0), currentGameId(-1)
 {
-    setupUi();
+    dbManager = new DatabaseManager("chess_games.db", this);
+    if (!dbManager->initDatabase()) {
+        QMessageBox::critical(this, "Database Error", "Failed to initialize the game database. Saved games will not be available.");
+    } else {
+         qDebug() << "Database initialized successfully.";
+    }
+
+    setupUi(); 
     setupConnections();
     updateStatus();
 }
@@ -34,12 +51,13 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     setWindowTitle(tr("Chess"));
-    resize(890, 650); 
+    resize(890, 650);
 
     // Menu Bar
     QMenuBar *menuBar = this->menuBar();
     QMenu *gameMenu = menuBar->addMenu(tr("&Game"));
     QAction *newGameAction = gameMenu->addAction(tr("&New Game"));
+    QAction *loadGameAction = gameMenu->addAction(tr("&Load Game"));
     gameMenu->addSeparator();
     QAction *quitAction = gameMenu->addAction(tr("&Quit"));
 
@@ -52,18 +70,18 @@ void MainWindow::setupUi()
 
     // Model
     chessModel = new ChessModel();
-    chessModel->setupStartingPosition();
 
     // Board Widget
     boardWidget = new ChessBoardWidget(chessModel, centralWidget);
+    boardWidget->setEnabled(false); 
 
     // Side Panel (Vertical Layout: Captured White, History, Captured Black, Status)
     QWidget *sidePanelWidget = new QWidget(centralWidget);
     QVBoxLayout *sidePanelLayout = new QVBoxLayout(sidePanelWidget);
-    sidePanelLayout->setContentsMargins(5, 0, 0, 0); 
+    sidePanelLayout->setContentsMargins(5, 0, 0, 0);
 
     blackCapturedWidget = new CapturedPiecesWidget(chessModel, false, sidePanelWidget);
-    blackCapturedWidget->setToolTip("Pieces captured by White"); 
+    blackCapturedWidget->setToolTip("Pieces captured by White");
     blackCapturedWidget->setMinimumHeight(130);
 
     moveHistoryWidget = new QListWidget(sidePanelWidget);
@@ -72,13 +90,14 @@ void MainWindow::setupUi()
     moveHistoryWidget->setMinimumWidth(120);
 
     whiteCapturedWidget = new CapturedPiecesWidget(chessModel, true, sidePanelWidget);
-    whiteCapturedWidget->setToolTip("Pieces captured by Black"); 
+    whiteCapturedWidget->setToolTip("Pieces captured by Black");
     whiteCapturedWidget->setMinimumHeight(130);
 
     statusLabel = new QLabel("Status", sidePanelWidget);
     statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setWordWrap(true); 
+    statusLabel->setWordWrap(true);
     statusLabel->setStyleSheet("font-weight: bold;");
+    statusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed); // Fixed height for status
 
 
     sidePanelLayout->addWidget(whiteCapturedWidget);
@@ -97,31 +116,47 @@ void MainWindow::setupUi()
     QSplitter *splitter = new QSplitter(Qt::Horizontal, centralWidget);
     splitter->addWidget(boardWidget);
     splitter->addWidget(sidePanelWidget);
-    splitter->setStretchFactor(0, 1); 
-    splitter->setStretchFactor(1, 0); 
-    splitter->setCollapsible(0, false); 
-    splitter->setCollapsible(1, false); 
-    splitter->setHandleWidth(5); 
-
+    splitter->setSizes({600, 250}); 
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 0);
+    splitter->setCollapsible(0, false);
+    splitter->setCollapsible(1, false);
+    splitter->setHandleWidth(5);
 
     // Add splitter to main layout
     mainLayout->addWidget(splitter);
     centralWidget->setLayout(mainLayout);
 
-    
+    // Status Bar
+    statusBar()->showMessage(tr("Ready"));
+
     // Connect Menu Actions
     connect(newGameAction, &QAction::triggered, this, &MainWindow::startNewGame);
+    connect(loadGameAction, &QAction::triggered, this, &MainWindow::loadGame); 
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
 }
 
 
 void MainWindow::setupConnections()
 {
-    connect(boardWidget, &ChessBoardWidget::moveAttempted, this, &MainWindow::handleMoveAttempt);
+    if(boardWidget) {
+        connect(boardWidget, &ChessBoardWidget::moveAttempted, this, &MainWindow::handleMoveAttempt);
+    } else {
+        qWarning() << "setupConnections: boardWidget is null!";
+    }
 }
 
 void MainWindow::handleMoveAttempt(const Move& move) {
-    if (!chessModel || !boardWidget || chessModel->isGameOver()) return;
+    if (!chessModel || !boardWidget || !dbManager || chessModel->isGameOver()) return;
+
+    if (currentGameId < 0 && !chessModel->isGameOver()) { 
+         qWarning() << "Attempted move but no active game ID is set. Move not saved.";
+    }
+
+    Piece* movingPiece = chessModel->getPiece(move.from.row, move.from.col);
+    Piece* capturedPiece = chessModel->getPiece(move.to.row, move.to.col);
+    bool isPawnMove = (movingPiece && movingPiece->type == 'P');
+    bool isCapture = (capturedPiece != nullptr) || (movingPiece && movingPiece->type == 'P' && chessModel->getEnPassantTarget() && move.to == *(chessModel->getEnPassantTarget())); // Check EP
 
     std::string sanBase = Utils::moveToSAN(move, *chessModel);
     qDebug() << "Attempting move:" << QString::fromStdString(sanBase);
@@ -131,23 +166,58 @@ void MainWindow::handleMoveAttempt(const Move& move) {
     if (success) {
         qDebug() << "Move successful:" << QString::fromStdString(sanBase);
 
-        boardWidget->resetInteractionState(false);
+        boardWidget->resetInteractionState(false); 
+        std::string fenAfterMove = chessModel->getCurrentFEN();
+        QString sanFull = QString::fromStdString(sanBase);
+        if (chessModel->getIsCheckmate()) sanFull += '#';
+        else if (chessModel->isInCheck()) sanFull += '+';
 
-        boardWidget->update();
-        whiteCapturedWidget->update();
-        blackCapturedWidget->update();
-        updateMoveHistory(move, sanBase);
+        bool isWhiteTurnJustEnded = !chessModel->isWhiteToMove(); 
+
+        if (currentGameId >= 0) {
+            if (!dbManager->saveMove(currentGameId, fullMoveNumber, isWhiteTurnJustEnded, move, sanFull, QString::fromStdString(fenAfterMove))) {
+                 qWarning() << "Failed to save move to database for game" << currentGameId;
+                 
+            }
+        } else {
+             
+             qDebug() << "Move made, but currentGameId is invalid. Move not saved to DB.";
+        }
+
+        updateMoveHistory(sanFull);
+        
+        if (isPawnMove || isCapture) {
+            halfMoveClock = 0;
+        } else {
+            halfMoveClock++;
+        }
+        
+        if (chessModel->isWhiteToMove()) { 
+             fullMoveNumber++;
+        }
+
+        boardWidget->update(); 
+        if (whiteCapturedWidget) whiteCapturedWidget->update();
+        if (blackCapturedWidget) blackCapturedWidget->update();
         updateStatus();
 
         if (chessModel->isGameOver()) {
              QString endMessage;
+             QString resultStr = ""; 
              if (chessModel->getIsCheckmate()) {
+                 resultStr = chessModel->isWhiteToMove() ? "0-1" : "1-0"; // Loser's turn -> winner is opponent
                  endMessage = QString("Checkmate! %1 wins.")
                                   .arg(chessModel->isWhiteToMove() ? "Black" : "White");
              } else if (chessModel->getIsStalemate()) {
+                 resultStr = "1/2-1/2";
                  endMessage = QString("Stalemate! Game is a draw.");
              }
+             if (currentGameId >= 0 && !resultStr.isEmpty()) {
+                 dbManager->finishGame(currentGameId, resultStr, QString::fromStdString(fenAfterMove));
+             }
+
              showGameOverMessage(endMessage);
+             boardWidget->setEnabled(false); 
         }
 
     } else {
@@ -156,36 +226,58 @@ void MainWindow::handleMoveAttempt(const Move& move) {
     }
 }
 
-void MainWindow::updateMoveHistory(const Move& move, const std::string& sanBase) {
+void MainWindow::updateMoveHistory(const QString& sanMove) {
     if (!moveHistoryWidget || !chessModel) return;
 
-    std::string finalSan = sanBase;
-    if (chessModel->getIsCheckmate()) {
-        finalSan += '#';
-    } else if (chessModel->isInCheck()) {
-        finalSan += '+';
-    }
-
     QString historyEntry;
-    Piece* movedPiece = chessModel->getPiece(move.to.row, move.to.col);
+    bool isWhiteTurnJustEnded = !chessModel->isWhiteToMove();
 
-    if (movedPiece && !movedPiece->isWhite) {
+    if (isWhiteTurnJustEnded) {
+        historyEntry = QString("%1. %2").arg(fullMoveNumber).arg(sanMove);
+        moveHistoryWidget->addItem(historyEntry);
+    } else { 
         if (moveHistoryWidget->count() > 0) {
             QListWidgetItem* lastItem = moveHistoryWidget->item(moveHistoryWidget->count() - 1);
-            historyEntry = lastItem->text() + "  " + QString::fromStdString(finalSan);
-            lastItem->setText(historyEntry);
+            if (lastItem) {
+                historyEntry = lastItem->text() + "  " + sanMove;
+                lastItem->setText(historyEntry);
+            } else {
+                 historyEntry = QString("%1. ... %2").arg(fullMoveNumber).arg(sanMove);
+                 moveHistoryWidget->addItem(historyEntry);
+            }
         } else {
-             historyEntry = QString("%1. ... %2").arg(fullMoveNumber).arg(QString::fromStdString(finalSan));
+             historyEntry = QString("%1. %2").arg(fullMoveNumber).arg(sanMove);
              moveHistoryWidget->addItem(historyEntry);
         }
-        fullMoveNumber++;
-    } else {
-        historyEntry = QString("%1. %2").arg(fullMoveNumber).arg(QString::fromStdString(finalSan));
-        moveHistoryWidget->addItem(historyEntry);
     }
 
     moveHistoryWidget->scrollToBottom();
 }
+
+void MainWindow::populateMoveHistory(const QList<QString>& sanMoves) {
+    if (!moveHistoryWidget) return;
+    moveHistoryWidget->clear();
+    int currentMoveNumberDisplay = 1; 
+    QString currentLine;
+
+    for (int i = 0; i < sanMoves.size(); ++i) {
+        bool isWhiteMove = (i % 2 == 0);
+
+        if (isWhiteMove) {
+            currentLine = QString("%1. %2").arg(currentMoveNumberDisplay).arg(sanMoves[i]);
+            if (i + 1 >= sanMoves.size()) {
+                 moveHistoryWidget->addItem(currentLine);
+            }
+        } else {
+            currentLine += "  " + sanMoves[i];
+            moveHistoryWidget->addItem(currentLine);
+            currentMoveNumberDisplay++; 
+            currentLine = "";
+        }
+    }
+     moveHistoryWidget->scrollToBottom();
+}
+
 
 void MainWindow::updateStatus() {
     if (!chessModel || !statusLabel) return;
@@ -197,8 +289,13 @@ void MainWindow::updateStatus() {
                              .arg(chessModel->isWhiteToMove() ? "Black" : "White");
         } else if (chessModel->getIsStalemate()) {
             statusText = "STALEMATE! Draw.";
+        } else {
+            statusText = "Game Over.";
         }
-    } else {
+    } else if (currentGameId < 0 && moveHistoryWidget && moveHistoryWidget->count() == 0) {
+        statusText = "Select New Game or Load Game.";
+    }
+    else {
         statusText = QString("%1 to move.")
                          .arg(chessModel->isWhiteToMove() ? "White" : "Black");
         if (chessModel->isInCheck()) {
@@ -214,20 +311,138 @@ void MainWindow::showGameOverMessage(const QString& message) {
 
 void MainWindow::startNewGame() {
      fullMoveNumber = 1;
+     halfMoveClock = 0;
+     currentGameId = -1;
+
      if (chessModel) {
          chessModel->setupStartingPosition();
+     } else {
+         qWarning() << "startNewGame: chessModel is null!";
+         return; 
      }
+
      if (boardWidget) {
          boardWidget->resetInteractionState();
-         boardWidget->setEnabled(true);
+         boardWidget->setEnabled(true); 
          boardWidget->update();
+     } else {
+          qWarning() << "startNewGame: boardWidget is null!";
      }
      if (moveHistoryWidget) {
          moveHistoryWidget->clear();
      }
      if (whiteCapturedWidget) whiteCapturedWidget->update();
      if (blackCapturedWidget) blackCapturedWidget->update();
+
+     if (dbManager) {
+        currentGameId = dbManager->startNewGame(); // Get the ID for the new game
+        if (currentGameId < 0) {
+             qWarning() << "Failed to create new game entry in database.";
+             QMessageBox::warning(this, "Database Error", "Could not save the start of the new game. Moves may not be saved.");
+        } else {
+            qDebug() << "Started new game with ID:" << currentGameId;
+        }
+     } else {
+         QMessageBox::warning(this, "Database Error", "Database manager not available. Game will not be saved.");
+     }
+
      updateStatus();
-     qDebug() << "New game started.";
+     qDebug() << "New game setup complete.";
      statusBar()->showMessage(tr("New Game Started."), 3000);
 }
+
+bool MainWindow::loadGame() {
+    qDebug() << "Executing loadGameFromStartup()...";
+    if (!dbManager) {
+        QMessageBox::warning(this, "Load Game Error", "Database manager is not available.");
+        return false; 
+    }
+
+    QList<GameInfo> savedGames = dbManager->getSavedGamesList();
+    if (savedGames.isEmpty()) {
+        QMessageBox::information(this, "Load Game", "No saved games found.");
+        return false; 
+    }
+
+    while (true) {
+        QDialog loadDialog(this);
+        loadDialog.setWindowTitle("Load Saved Game");
+        QVBoxLayout *layout = new QVBoxLayout(&loadDialog);
+
+        QTableWidget *tableWidget = new QTableWidget(savedGames.count(), 5, &loadDialog);
+        tableWidget->setHorizontalHeaderLabels({"ID", "Start Time", "Players", "Result", "End Time"});
+        tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+        tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+        tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers); 
+        tableWidget->verticalHeader()->setVisible(false); 
+
+        for (int i = 0; i < savedGames.count(); ++i) {
+            const GameInfo& info = savedGames[i];
+            tableWidget->setItem(i, 0, new QTableWidgetItem(QString::number(info.gameId)));
+            tableWidget->setItem(i, 1, new QTableWidgetItem(QDateTime::fromString(info.startTime, Qt::ISODate).toString("yyyy-MM-dd hh:mm"))); 
+            tableWidget->setItem(i, 2, new QTableWidgetItem(QString("%1 vs %2").arg(info.whitePlayer).arg(info.blackPlayer)));
+            tableWidget->setItem(i, 3, new QTableWidgetItem(info.result.isEmpty() ? "In Progress" : info.result));
+            tableWidget->setItem(i, 4, new QTableWidgetItem(info.endTime.isEmpty() ? "-" : QDateTime::fromString(info.endTime, Qt::ISODate).toString("yyyy-MM-dd hh:mm")));
+
+            tableWidget->item(i, 0)->setData(Qt::UserRole, QVariant::fromValue(info.gameId));
+        }
+
+        tableWidget->resizeColumnsToContents();
+        tableWidget->horizontalHeader()->setStretchLastSection(true);
+        tableWidget->sortByColumn(1, Qt::DescendingOrder);
+
+        layout->addWidget(tableWidget);
+
+        QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &loadDialog);
+        connect(buttonBox, &QDialogButtonBox::accepted, &loadDialog, &QDialog::accept);
+        connect(buttonBox, &QDialogButtonBox::rejected, &loadDialog, &QDialog::reject);
+        layout->addWidget(buttonBox);
+
+        loadDialog.setLayout(layout);
+        loadDialog.setMinimumSize(500, 300);
+
+        if (loadDialog.exec() == QDialog::Accepted) {
+            QList<QTableWidgetItem*> selectedItems = tableWidget->selectedItems();
+            if (!selectedItems.isEmpty() && selectedItems.first()->row() >= 0) {
+                qint64 selectedGameId = tableWidget->item(selectedItems.first()->row(), 0)->data(Qt::UserRole).toLongLong();
+
+                qDebug() << "User selected game ID:" << selectedGameId;
+
+                QList<QString> sanMovesList;
+                if (dbManager->loadGameMoves(selectedGameId, chessModel, sanMovesList)) {
+                    currentGameId = selectedGameId; 
+                    fullMoveNumber = (sanMovesList.size() / 2) + 1; 
+                    halfMoveClock = 0;
+
+                    if (boardWidget) {
+                        boardWidget->resetInteractionState();
+                        boardWidget->setEnabled(!chessModel->isGameOver());
+                        boardWidget->update();
+                    }
+
+                    if (whiteCapturedWidget) whiteCapturedWidget->update(); 
+                    if (blackCapturedWidget) blackCapturedWidget->update();
+
+                    populateMoveHistory(sanMovesList);
+
+                    updateStatus();
+
+                    statusBar()->showMessage(QString("Loaded game %1.").arg(selectedGameId), 3000);
+                    qDebug() << "Game" << selectedGameId << "loaded successfully.";
+
+                } else {
+                    QMessageBox::warning(this, "Load Game Error", QString("Failed to load game data for ID %1.").arg(selectedGameId));
+                    currentGameId = -1; 
+                }
+                return true;
+            } else {
+                QMessageBox::warning(this, "No Selection", "Please select a game to load.");
+                continue;
+            }
+        } else {
+            return false;
+        }
+    }
+    return false;
+}
+

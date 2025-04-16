@@ -3,6 +3,7 @@
 #include <algorithm> 
 #include <vector>
 #include <QDebug>   
+#include <sstream> 
 
 #include "model/ChessModel.h"
 #include "pieces/Pawn.h"
@@ -78,6 +79,7 @@ void ChessModel::setupStartingPosition() {
 void ChessModel::setupFromFEN(const std::string& fen) {
     // Clear the board first
     clearBoard();
+    clearCapturedPieces(); 
     whiteToMove = true;
     for (int i = 0; i < 4; ++i) castlingRights[i] = false;
 
@@ -137,6 +139,69 @@ void ChessModel::setupFromFEN(const std::string& fen) {
     }
     
     updateCurrentValidMoves();
+}
+
+
+std::string ChessModel::generateFEN() const {
+    std::ostringstream fen;
+    // 1. Piece placement
+    for (int row = 7; row >= 0; --row) {
+        int emptyCount = 0;
+        for (int col = 0; col < 8; ++col) {
+            Piece* p = board[row][col];
+            if (p == nullptr) {
+                emptyCount++;
+            } else {
+                if (emptyCount > 0) {
+                    fen << emptyCount;
+                    emptyCount = 0;
+                }
+                fen << (p->isWhite ? p->type : (char)tolower(p->type));
+            }
+        }
+        if (emptyCount > 0) {
+            fen << emptyCount;
+        }
+        if (row > 0) {
+            fen << '/';
+        }
+    }
+
+    // 2. Active color
+    fen << ' ' << (whiteToMove ? 'w' : 'b');
+
+    // 3. Castling availability
+    fen << ' ';
+    std::string castleStr = "";
+    if (castlingRights[0]) castleStr += 'K';
+    if (castlingRights[1]) castleStr += 'Q';
+    if (castlingRights[2]) castleStr += 'k';
+    if (castlingRights[3]) castleStr += 'q';
+    fen << (castleStr.empty() ? "-" : castleStr);
+
+    // 4. En passant target square
+    fen << ' ';
+    if (enPassantTarget != nullptr && enPassantTarget->isValid()) {
+         int epRow = enPassantTarget->row;
+         int epCol = enPassantTarget->col;
+         fen << (char)('a' + epCol) << (char)('1' + epRow);
+
+    } else {
+        fen << '-';
+    }
+
+    // 5. Halfmove clock (optional, for 50-move rule - set to 0 for simplicity)
+    fen << " 0";
+
+    // 6. Fullmove number (optional - set to 1 for simplicity, update if needed)
+    // This should ideally be tracked properly if you want full FEN compliance.
+     fen << " 1";
+
+    return fen.str();
+}
+
+std::string ChessModel::getCurrentFEN() const {
+    return generateFEN();
 }
 
 Piece* ChessModel::getPiece(int row, int col) const {

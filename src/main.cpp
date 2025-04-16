@@ -1,12 +1,12 @@
-#include <QApplication> 
-#include "gui/MainWindow.h" 
-#include "model/ChessModel.h"   
-#include "gui/ChessView.h" 
-#include "controller/ChessController.h" 
+#include <QApplication>
+#include "gui/MainWindow.h"
+#include "gui/WelcomeDialog.h"
+#include "model/ChessModel.h"
+#include "gui/ChessView.h"
+#include "controller/ChessController.h"
 #include <iostream>
 #include <string>
 #include <vector>
-
 int main(int argc, char *argv[])
 {
     bool consoleMode = false;
@@ -25,18 +25,39 @@ int main(int argc, char *argv[])
         ChessModel model;
         ChessView view;
         ChessController controller(&model, &view);
-        controller.run(); // Start the console game loop
-        return 0; // Exit after console game finishes
+        controller.run();
+        return 0;
     } else {
         // --- GUI Mode ---
         // Create the Qt Application instance
         QApplication app(argc, argv);
 
-        // Create and show the main window (which creates its own model)
-        MainWindow mainWindow;
-        mainWindow.show();
+        while (true) {
+            // Show Welcome Dialog
+            WelcomeDialog welcomeDialog;
+            if (welcomeDialog.exec() != QDialog::Accepted) {
+                return 0;
+            }
 
-        // Start the Qt event loop
-        return app.exec();
+            WelcomeDialog::UserChoice choice = welcomeDialog.getChoice();
+            MainWindow *mainWindow = new MainWindow();
+
+            if (choice == WelcomeDialog::UserChoice::NewGame) {
+                mainWindow->startNewGame();
+                mainWindow->show();
+                return app.exec();
+            } else if (choice == WelcomeDialog::UserChoice::LoadGame) {
+                if (mainWindow->loadGame()) {
+                    mainWindow->show();
+                    return app.exec();
+                } else {
+                    delete mainWindow; 
+                    continue;
+                }
+            } else {
+                delete mainWindow;
+                return 1;
+            }
+        }
     }
 }

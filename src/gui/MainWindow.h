@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "model/DatabaseManager.h" 
 
 class ChessBoardWidget;
 class ChessModel;
@@ -18,9 +19,12 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+public slots:
+    void startNewGame();
+    bool loadGame(); 
+
 private slots:
     void handleMoveAttempt(const Move& move);
-    void startNewGame();
 
 private:
     ChessBoardWidget *boardWidget = nullptr;
@@ -31,12 +35,16 @@ private:
     CapturedPiecesWidget *blackCapturedWidget = nullptr;
 
     int fullMoveNumber = 1;
+    int halfMoveClock = 0;
+    DatabaseManager *dbManager = nullptr;
+    qint64 currentGameId = -1; 
 
     void setupUi();
     void setupConnections();
     void updateStatus();
     void showGameOverMessage(const QString& message);
-    void updateMoveHistory(const Move& move, const std::string& sanBase);
+    void updateMoveHistory(const QString& sanMove);
+    void populateMoveHistory(const QList<QString>& sanMoves);
 };
 
 #endif

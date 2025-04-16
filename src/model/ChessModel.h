@@ -57,13 +57,9 @@ public:
     bool isInCheck() const;
     const std::vector<Piece*>& getCapturedPieces(bool capturedByWhitePlayer) const; 
     const std::vector<Move>& getMoveHistory() const { return moveHistory; } 
-
-
-    // Move Generation & Validation
     std::vector<Position> getValidMoves(Position pos) const;
-
-    // Game Action
     bool makeMove(const Move& move);
+    std::string getCurrentFEN() const;
 };
 
 #endif // CHESS_MODEL_H
