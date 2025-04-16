@@ -1,11 +1,10 @@
-#include <cctype>
-#include <cmath>
-#include <algorithm> 
+#include <cmath> 
+#include <algorithm>
 #include <vector>
-#include <QDebug>   
-#include <sstream> 
+#include <QDebug>
 
 #include "model/ChessModel.h"
+#include "core/FenUtils.h" // Include the new utility
 #include "pieces/Pawn.h"
 #include "pieces/Knight.h"
 #include "pieces/Bishop.h"
@@ -56,152 +55,18 @@ void ChessModel::clearBoard() {
     currentValidMoves.clear();
 }
 
-Piece* ChessModel::createPiece(char type, bool isWhite) {
-    char upperType = toupper(type);
-    switch(upperType) {
-        case 'P': return new Pawn(isWhite);
-        case 'N': return new Knight(isWhite);
-        case 'B': return new Bishop(isWhite);
-        case 'R': return new Rook(isWhite);
-        case 'Q': return new Queen(isWhite);
-        case 'K': return new King(isWhite);
-        default:
-            qWarning() << "Warning: Invalid piece type '" << type << "' in createPiece.";
-            return nullptr;
-    }
-}
-
 void ChessModel::setupStartingPosition() {
-    clearBoard();
     setupFromFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 }
 
 void ChessModel::setupFromFEN(const std::string& fen) {
-    // Clear the board first
-    clearBoard();
-    clearCapturedPieces(); 
-    whiteToMove = true;
-    for (int i = 0; i < 4; ++i) castlingRights[i] = false;
-
-    int row = 7;
-    int col = 0;
-    
-    // Parse piece placement
-    size_t i = 0;
-    while (i < fen.length() && fen[i] != ' ') {
-        if (fen[i] == '/') {
-            row--;
-            col = 0;
-        } else if (fen[i] >= '1' && fen[i] <= '8') {
-            col += fen[i] - '0';
-        } else {
-            bool isWhite = (fen[i] >= 'A' && fen[i] <= 'Z');
-            char type = isWhite ? fen[i] : toupper(fen[i]);
-            board[row][col] = createPiece(type, isWhite);
-            col++;
-        }
-        i++;
-    } 
-
-    i++;
-    if (i < fen.length()) {
-        whiteToMove = (fen[i] == 'w');
-        i += 2;
+    if (!FenUtils::parseFen(fen, *this)) {
+         qWarning("Failed to parse provided FEN string: %s", fen.c_str());
     }
-    
-    // Parse castling availability
-    for (int j = 0; j < 4; j++) {
-        castlingRights[j] = false;
-    }
-    
-    while (i < fen.length() && fen[i] != ' ') {
-        if (fen[i] == 'K') castlingRights[0] = true;
-        else if (fen[i] == 'Q') castlingRights[1] = true;
-        else if (fen[i] == 'k') castlingRights[2] = true;
-        else if (fen[i] == 'q') castlingRights[3] = true;
-        i++;
-    }
-    
-    i++;
-    
-    // Parse en passant target square
-    if (i < fen.length() && fen[i] != '-') {
-        int enPassantCol = fen[i] - 'a';
-        i++;
-        int enPassantRow = 8 - (fen[i] - '0');
-        if (enPassantTarget != nullptr) {
-            delete enPassantTarget;
-        }
-        enPassantTarget = new Position(enPassantRow, enPassantCol);
-        i++;
-    } else if (i < fen.length()) {
-        i++; // Skip the '-'
-    }
-    
-    updateCurrentValidMoves();
-}
-
-
-std::string ChessModel::generateFEN() const {
-    std::ostringstream fen;
-    // 1. Piece placement
-    for (int row = 7; row >= 0; --row) {
-        int emptyCount = 0;
-        for (int col = 0; col < 8; ++col) {
-            Piece* p = board[row][col];
-            if (p == nullptr) {
-                emptyCount++;
-            } else {
-                if (emptyCount > 0) {
-                    fen << emptyCount;
-                    emptyCount = 0;
-                }
-                fen << (p->isWhite ? p->type : (char)tolower(p->type));
-            }
-        }
-        if (emptyCount > 0) {
-            fen << emptyCount;
-        }
-        if (row > 0) {
-            fen << '/';
-        }
-    }
-
-    // 2. Active color
-    fen << ' ' << (whiteToMove ? 'w' : 'b');
-
-    // 3. Castling availability
-    fen << ' ';
-    std::string castleStr = "";
-    if (castlingRights[0]) castleStr += 'K';
-    if (castlingRights[1]) castleStr += 'Q';
-    if (castlingRights[2]) castleStr += 'k';
-    if (castlingRights[3]) castleStr += 'q';
-    fen << (castleStr.empty() ? "-" : castleStr);
-
-    // 4. En passant target square
-    fen << ' ';
-    if (enPassantTarget != nullptr && enPassantTarget->isValid()) {
-         int epRow = enPassantTarget->row;
-         int epCol = enPassantTarget->col;
-         fen << (char)('a' + epCol) << (char)('1' + epRow);
-
-    } else {
-        fen << '-';
-    }
-
-    // 5. Halfmove clock (optional, for 50-move rule - set to 0 for simplicity)
-    fen << " 0";
-
-    // 6. Fullmove number (optional - set to 1 for simplicity, update if needed)
-    // This should ideally be tracked properly if you want full FEN compliance.
-     fen << " 1";
-
-    return fen.str();
 }
 
 std::string ChessModel::getCurrentFEN() const {
-    return generateFEN();
+    return FenUtils::generateFen(*this);
 }
 
 Piece* ChessModel::getPiece(int row, int col) const {
@@ -456,7 +321,9 @@ bool ChessModel::makeMove(const Move& move) {
     if (piece && piece->type == 'P' && (move.to.row == 0 || move.to.row == 7)) {
         Piece* pawnToPromote = piece;
         bool promoteToWhite = pawnToPromote->isWhite;
-        Piece* promotedPiece = createPiece('Q', promoteToWhite);
+        // Create promotion piece directly here (Queen by default)
+        // TODO: Allow choosing promotion piece (e.g., via UI signal/slot)
+        Piece* promotedPiece = new Queen(promoteToWhite);
         if (promotedPiece) {
             board[move.to.row][move.to.col] = promotedPiece;
             promotedPiece->hasMoved = true;

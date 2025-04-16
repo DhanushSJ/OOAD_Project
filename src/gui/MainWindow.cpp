@@ -1,22 +1,15 @@
 #include "gui/MainWindow.h"
 #include "gui/WelcomeDialog.h"
-#include "ChessBoardWidget.h"
+#include "gui/ChessBoardWidget.h"
+#include "gui/CapturedPiecesWidget.h"
+#include "gui/GameLoadDialog.h"
 #include "model/ChessModel.h"
-#include "CapturedPiecesWidget.h"
 #include "core/Utils.h"
 #include "model/DatabaseManager.h"
 
-#include <QDialog>
-#include <QVBoxLayout>
-#include <QTableWidget>
-#include <QPushButton>
-#include <QDialogButtonBox>
-#include <QHeaderView>
-#include <QAbstractItemView>
-#include <QDateTime>
-
 #include <QApplication>
 #include <QWidget>
+#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
 #include <QListWidget>
@@ -73,16 +66,15 @@ void MainWindow::setupUi()
 
     // Board Widget
     boardWidget = new ChessBoardWidget(chessModel, centralWidget);
-    boardWidget->setEnabled(false); 
 
     // Side Panel (Vertical Layout: Captured White, History, Captured Black, Status)
     QWidget *sidePanelWidget = new QWidget(centralWidget);
     QVBoxLayout *sidePanelLayout = new QVBoxLayout(sidePanelWidget);
-    sidePanelLayout->setContentsMargins(5, 0, 0, 0);
+    sidePanelLayout->setContentsMargins(5, 0, 10, 0); 
 
     blackCapturedWidget = new CapturedPiecesWidget(chessModel, false, sidePanelWidget);
-    blackCapturedWidget->setToolTip("Pieces captured by White");
-    blackCapturedWidget->setMinimumHeight(130);
+    blackCapturedWidget->setToolTip("Pieces captured by White"); 
+    blackCapturedWidget->setMinimumHeight(100);
 
     moveHistoryWidget = new QListWidget(sidePanelWidget);
     moveHistoryWidget->setAlternatingRowColors(true);
@@ -90,14 +82,14 @@ void MainWindow::setupUi()
     moveHistoryWidget->setMinimumWidth(120);
 
     whiteCapturedWidget = new CapturedPiecesWidget(chessModel, true, sidePanelWidget);
-    whiteCapturedWidget->setToolTip("Pieces captured by Black");
-    whiteCapturedWidget->setMinimumHeight(130);
+    whiteCapturedWidget->setToolTip("Pieces captured by Black"); 
+    whiteCapturedWidget->setMinimumHeight(100);
 
     statusLabel = new QLabel("Status", sidePanelWidget);
     statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setWordWrap(true);
+    statusLabel->setWordWrap(true); 
     statusLabel->setStyleSheet("font-weight: bold;");
-    statusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed); // Fixed height for status
+    statusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
 
     sidePanelLayout->addWidget(whiteCapturedWidget);
@@ -116,7 +108,6 @@ void MainWindow::setupUi()
     QSplitter *splitter = new QSplitter(Qt::Horizontal, centralWidget);
     splitter->addWidget(boardWidget);
     splitter->addWidget(sidePanelWidget);
-    splitter->setSizes({600, 250}); 
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 0);
     splitter->setCollapsible(0, false);
@@ -132,7 +123,7 @@ void MainWindow::setupUi()
 
     // Connect Menu Actions
     connect(newGameAction, &QAction::triggered, this, &MainWindow::startNewGame);
-    connect(loadGameAction, &QAction::triggered, this, &MainWindow::loadGame); 
+    connect(loadGameAction, &QAction::triggered, this, &MainWindow::loadGame);
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
 }
 
@@ -140,7 +131,7 @@ void MainWindow::setupUi()
 void MainWindow::setupConnections()
 {
     if(boardWidget) {
-        connect(boardWidget, &ChessBoardWidget::moveAttempted, this, &MainWindow::handleMoveAttempt);
+        connect(boardWidget, &ChessBoardWidget::moveAttempted, this, &MainWindow::handleMoveAttempt, Qt::AutoConnection);
     } else {
         qWarning() << "setupConnections: boardWidget is null!";
     }
@@ -352,97 +343,56 @@ void MainWindow::startNewGame() {
 }
 
 bool MainWindow::loadGame() {
-    qDebug() << "Executing loadGameFromStartup()...";
+    qDebug() << "Attempting to load game...";
     if (!dbManager) {
         QMessageBox::warning(this, "Load Game Error", "Database manager is not available.");
-        return false; 
+        return false;
     }
 
-    QList<GameInfo> savedGames = dbManager->getSavedGamesList();
-    if (savedGames.isEmpty()) {
+    if (dbManager->getSavedGamesList().isEmpty()) {
         QMessageBox::information(this, "Load Game", "No saved games found.");
-        return false; 
+        return false;
     }
 
-    while (true) {
-        QDialog loadDialog(this);
-        loadDialog.setWindowTitle("Load Saved Game");
-        QVBoxLayout *layout = new QVBoxLayout(&loadDialog);
+    GameLoadDialog loadDialog(dbManager, this);
+    if (loadDialog.exec() == QDialog::Accepted) {
+        qint64 selectedGameId = loadDialog.getSelectedGameId();
 
-        QTableWidget *tableWidget = new QTableWidget(savedGames.count(), 5, &loadDialog);
-        tableWidget->setHorizontalHeaderLabels({"ID", "Start Time", "Players", "Result", "End Time"});
-        tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-        tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
-        tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers); 
-        tableWidget->verticalHeader()->setVisible(false); 
+        qDebug() << "User selected game ID:" << selectedGameId;
 
-        for (int i = 0; i < savedGames.count(); ++i) {
-            const GameInfo& info = savedGames[i];
-            tableWidget->setItem(i, 0, new QTableWidgetItem(QString::number(info.gameId)));
-            tableWidget->setItem(i, 1, new QTableWidgetItem(QDateTime::fromString(info.startTime, Qt::ISODate).toString("yyyy-MM-dd hh:mm"))); 
-            tableWidget->setItem(i, 2, new QTableWidgetItem(QString("%1 vs %2").arg(info.whitePlayer).arg(info.blackPlayer)));
-            tableWidget->setItem(i, 3, new QTableWidgetItem(info.result.isEmpty() ? "In Progress" : info.result));
-            tableWidget->setItem(i, 4, new QTableWidgetItem(info.endTime.isEmpty() ? "-" : QDateTime::fromString(info.endTime, Qt::ISODate).toString("yyyy-MM-dd hh:mm")));
+        QList<QString> sanMovesList;
+        if (dbManager->loadGameMoves(selectedGameId, chessModel, sanMovesList)) {
+            currentGameId = selectedGameId;
+            fullMoveNumber = (sanMovesList.size() / 2) + 1;
+            // Determine halfMoveClock based on last moves if possible, or reset
+            // For simplicity, we'll reset it here. 
+            halfMoveClock = 0;
 
-            tableWidget->item(i, 0)->setData(Qt::UserRole, QVariant::fromValue(info.gameId));
-        }
-
-        tableWidget->resizeColumnsToContents();
-        tableWidget->horizontalHeader()->setStretchLastSection(true);
-        tableWidget->sortByColumn(1, Qt::DescendingOrder);
-
-        layout->addWidget(tableWidget);
-
-        QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &loadDialog);
-        connect(buttonBox, &QDialogButtonBox::accepted, &loadDialog, &QDialog::accept);
-        connect(buttonBox, &QDialogButtonBox::rejected, &loadDialog, &QDialog::reject);
-        layout->addWidget(buttonBox);
-
-        loadDialog.setLayout(layout);
-        loadDialog.setMinimumSize(500, 300);
-
-        if (loadDialog.exec() == QDialog::Accepted) {
-            QList<QTableWidgetItem*> selectedItems = tableWidget->selectedItems();
-            if (!selectedItems.isEmpty() && selectedItems.first()->row() >= 0) {
-                qint64 selectedGameId = tableWidget->item(selectedItems.first()->row(), 0)->data(Qt::UserRole).toLongLong();
-
-                qDebug() << "User selected game ID:" << selectedGameId;
-
-                QList<QString> sanMovesList;
-                if (dbManager->loadGameMoves(selectedGameId, chessModel, sanMovesList)) {
-                    currentGameId = selectedGameId; 
-                    fullMoveNumber = (sanMovesList.size() / 2) + 1; 
-                    halfMoveClock = 0;
-
-                    if (boardWidget) {
-                        boardWidget->resetInteractionState();
-                        boardWidget->setEnabled(!chessModel->isGameOver());
-                        boardWidget->update();
-                    }
-
-                    if (whiteCapturedWidget) whiteCapturedWidget->update(); 
-                    if (blackCapturedWidget) blackCapturedWidget->update();
-
-                    populateMoveHistory(sanMovesList);
-
-                    updateStatus();
-
-                    statusBar()->showMessage(QString("Loaded game %1.").arg(selectedGameId), 3000);
-                    qDebug() << "Game" << selectedGameId << "loaded successfully.";
-
-                } else {
-                    QMessageBox::warning(this, "Load Game Error", QString("Failed to load game data for ID %1.").arg(selectedGameId));
-                    currentGameId = -1; 
-                }
-                return true;
+            if (boardWidget) {
+                boardWidget->resetInteractionState();
+                boardWidget->setEnabled(!chessModel->isGameOver()); 
+                boardWidget->update();
             } else {
-                QMessageBox::warning(this, "No Selection", "Please select a game to load.");
-                continue;
+                 qWarning() << "loadGame: boardWidget is null!";
             }
+
+            if (whiteCapturedWidget) whiteCapturedWidget->update();
+            if (blackCapturedWidget) blackCapturedWidget->update();
+
+            populateMoveHistory(sanMovesList);
+            updateStatus(); 
+
+            statusBar()->showMessage(QString("Loaded game %1.").arg(selectedGameId), 3000);
+            qDebug() << "Game" << selectedGameId << "loaded successfully.";
+            return true;
+
         } else {
+            QMessageBox::warning(this, "Load Game Error", QString("Failed to load game data for ID %1.").arg(selectedGameId));
+            currentGameId = -1;
             return false;
         }
+    } else {
+        qDebug() << "Load game dialog cancelled by user.";
+        return false; 
     }
-    return false;
 }
-

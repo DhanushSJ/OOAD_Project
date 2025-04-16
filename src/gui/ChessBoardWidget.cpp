@@ -1,10 +1,11 @@
-#include "ChessBoardWidget.h"
+#include "gui/ChessBoardWidget.h"
 #include "model/pieces/Piece.h"
 #include "model/Move.h"
 #include "core/Utils.h"
 #include "model/ChessModel.h"
-#include "Constants.h"
-#include "DrawingUtils.h"
+#include "gui/Constants.h"
+#include "gui/DrawingUtils.h"
+#include "gui/BoardInteractionHandler.h" 
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -22,12 +23,15 @@
 #include <algorithm>
 
 ChessBoardWidget::ChessBoardWidget(ChessModel* model, QWidget *parent)
-    : QWidget(parent), chessModel(model), selectedSquare{-1, -1}, dragIndicatorSource{-1, -1}
+    : QWidget(parent), chessModel(model)
 {
     setAcceptDrops(true);
+    interactionHandler = new BoardInteractionHandler(this, chessModel, this); // Create handler
 }
 
-ChessBoardWidget::~ChessBoardWidget() = default;
+ChessBoardWidget::~ChessBoardWidget() {
+    delete interactionHandler; 
+}
 
 QSize ChessBoardWidget::minimumSizeHint() const { return QSize(320, 320); }
 QSize ChessBoardWidget::sizeHint() const { return QSize(480, 480); }
@@ -56,10 +60,16 @@ Position ChessBoardWidget::positionFromPoint(const QPoint& point) const {
 }
 
 void ChessBoardWidget::resetInteractionState(bool doUpdate) {
-    selectedSquare = {-1, -1};
-    draggedPiece = nullptr;
-    dragIndicatorSource = {-1, -1};
+    interactionHandler->resetState();
     if (doUpdate) update();
+}
+
+Position ChessBoardWidget::getSelectedSquare() const {
+    return interactionHandler->getSelectedSquare();
+}
+
+Position ChessBoardWidget::getDragIndicatorSource() const {
+    return interactionHandler->getDragIndicatorSource();
 }
 
 void ChessBoardWidget::paintEvent(QPaintEvent *event) {
@@ -78,28 +88,27 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
     }
 
     // Highlight selected square
-    if (selectedSquare.isValid()) {
+    if (getSelectedSquare().isValid()) {
         painter.setBrush(ChessConstants::SELECTION_HIGHLIGHT_COLOR);
-        painter.drawRect(squareRect(selectedSquare));
+        painter.drawRect(squareRect(getSelectedSquare()));
     }
 
     // Draw pieces
     for (int row = 0; row < 8; ++row) {
         for (int col = 0; col < 8; ++col) {
             Position currentPos{row, col};
-            
-            if (dragIndicatorSource.isValid() && currentPos == dragIndicatorSource)
+
+            if (getDragIndicatorSource().isValid() && currentPos == getDragIndicatorSource())
                 continue;
-    
+
             if (Piece* piece = chessModel->getPiece(row, col)) {
                 ChessDrawingUtils::drawPiece(painter, piece, squareRect(currentPos), sSize);
             }
         }
     }
-    
 
     // Show valid move indicators
-    Position indicatorPos = dragIndicatorSource.isValid() ? dragIndicatorSource : selectedSquare;
+    Position indicatorPos = getDragIndicatorSource().isValid() ? getDragIndicatorSource() : getSelectedSquare();
     if (indicatorPos.isValid()) {
         std::vector<Position> validMoves = chessModel->getValidMoves(indicatorPos);
         Piece* sourcePiece = chessModel->getPiece(indicatorPos.row, indicatorPos.col);
@@ -139,210 +148,21 @@ void ChessBoardWidget::paintEvent(QPaintEvent *event) {
 }
 
 void ChessBoardWidget::mousePressEvent(QMouseEvent* event) {
-    bool isLeftClick = (event->button() == Qt::LeftButton);
-    if (!isLeftClick || (chessModel && chessModel->isGameOver())) {
-        if (selectedSquare.isValid() || dragIndicatorSource.isValid())
-            resetInteractionState();
-        return;
-    }
-
-    if (!chessModel) {
-        qWarning() << "MousePress: chessModel is null!";
-        return;
-    }
-
-    const Position clickedPos = positionFromPoint(event->pos());
-    if (!clickedPos.isValid()) {
-        if (selectedSquare.isValid() || dragIndicatorSource.isValid())
-            resetInteractionState();
-        return;
-    }
-
-    Piece* clickedPiece = chessModel->getPiece(clickedPos.row, clickedPos.col);
-    draggedPiece = nullptr;
-
-    // Case 1: Piece already selected
-    if (selectedSquare.isValid()) {
-        Position startPos = selectedSquare;
-        Piece* selectedPiece = chessModel->getPiece(startPos.row, startPos.col);
-
-        if (!selectedPiece) {
-            qWarning() << "Selected square valid but no piece found.";
-            resetInteractionState();
-            return;
-        }
-
-        if (clickedPos == startPos) {
-            resetInteractionState();
-            return;
-        }
-
-        auto validMoves = chessModel->getValidMoves(startPos);
-        bool isValidMove = std::find(validMoves.begin(), validMoves.end(), clickedPos) != validMoves.end();
-
-        if (isValidMove) {
-            Move move(startPos, clickedPos);
-            qDebug() << "Click Move Attempted:" << QString::fromStdString(Utils::moveToSAN(move, *chessModel));
-            emit moveAttempted(move);
-        } else if (clickedPiece && clickedPiece->isWhite == selectedPiece->isWhite) {
-            selectedSquare = clickedPos;
-            dragIndicatorSource = {-1, -1};
-            dragStartPosition = event->pos();
-            draggedPiece = clickedPiece;
-            qDebug() << "Selection switched to:" << QString::fromStdString(Utils::positionToString(clickedPos));
-            update();
-        } else {
-            qDebug() << "Selection cancelled (invalid second click).";
-            resetInteractionState();
-        }
-        return;
-    }
-
-    // Case 2: No piece selected
-    if (clickedPiece && clickedPiece->isWhite == chessModel->isWhiteToMove()) {
-        selectedSquare = clickedPos;
-        dragIndicatorSource = {-1, -1};
-        dragStartPosition = event->pos();
-        draggedPiece = clickedPiece;
-        qDebug() << "Piece Selected (Click):" << QString::fromStdString(Utils::positionToString(clickedPos));
-        update();
-    } else if (selectedSquare.isValid() || dragIndicatorSource.isValid()) {
-        resetInteractionState();
-    }
+    interactionHandler->handleMousePress(event);
 }
 
 void ChessBoardWidget::mouseMoveEvent(QMouseEvent *event) {
-    if (!(event->buttons() & Qt::LeftButton) || !draggedPiece || (chessModel && chessModel->isGameOver()))
-        return;
-
-    if ((event->pos() - dragStartPosition).manhattanLength() < QApplication::startDragDistance())
-        return;
-
-    startDrag();
-}
-
-void ChessBoardWidget::startDrag() {
-    Position startPos = positionFromPoint(dragStartPosition);
-    if (!startPos.isValid() || !chessModel) {
-        qWarning() << "Invalid drag start position or chessModel is null.";
-        resetInteractionState();
-        return;
-    }
-
-    Piece* piece = chessModel->getPiece(startPos.row, startPos.col);
-    if (!piece) {
-        qWarning() << "No piece at drag start position.";
-        resetInteractionState();
-        return;
-    }
-
-    if (piece->isWhite != chessModel->isWhiteToMove()) {
-        qWarning() << "Attempted to drag opponent's piece.";
-        resetInteractionState();
-        return;
-    }
-
-    selectedSquare = {-1, -1};
-    dragIndicatorSource = startPos;
-    draggedPiece = nullptr;
-    qDebug() << "Drag started from" << QString::fromStdString(Utils::positionToString(startPos));
-
-    QMimeData *mimeData = new QMimeData;
-    QByteArray data;
-    QDataStream(&data, QIODevice::WriteOnly) << startPos.row << startPos.col;
-    mimeData->setData("application/x-chess-move-start", data);
-
-    QDrag *drag = new QDrag(this);
-    drag->setMimeData(mimeData);
-
-    int sSize = squareSize();
-    if (sSize <= 0) {
-        qWarning() << "Invalid square size for drag pixmap.";
-        resetInteractionState();
-        return;
-    }
-
-    QPixmap pixmap(sSize, sSize);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    ChessDrawingUtils::drawPiece(painter, piece, pixmap.rect(), sSize);
-
-    drag->setPixmap(pixmap);
-    drag->setHotSpot(QPoint(sSize / 2, sSize / 2));
-    update();
-
-    drag->exec(Qt::MoveAction);
-
-    qDebug() << "Drag finished.";
-    dragIndicatorSource = {-1, -1};
-    selectedSquare = {-1, -1};
-    update();
+    interactionHandler->handleMouseMove(event);
 }
 
 void ChessBoardWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (chessModel && !chessModel->isGameOver() && event->mimeData()->hasFormat("application/x-chess-move-start"))
-        event->acceptProposedAction();
-    else
-        event->ignore();
+    interactionHandler->handleDragEnter(event);
 }
 
 void ChessBoardWidget::dragMoveEvent(QDragMoveEvent *event) {
-    if (chessModel && !chessModel->isGameOver() && event->mimeData()->hasFormat("application/x-chess-move-start"))
-        event->acceptProposedAction();
-    else
-        event->ignore();
+    interactionHandler->handleDragMove(event);
 }
 
 void ChessBoardWidget::dropEvent(QDropEvent *event) {
-    if (!chessModel || chessModel->isGameOver()) {
-        event->ignore();
-        resetInteractionState();
-        return;
-    }
-
-    Position startPos = {-1, -1};
-    if (event->mimeData()->hasFormat("application/x-chess-move-start")) {
-        QByteArray data = event->mimeData()->data("application/x-chess-move-start");
-        QDataStream stream(&data, QIODevice::ReadOnly);
-        int row, col;
-        if ((stream >> row >> col).status() == QDataStream::Ok)
-            startPos = {row, col};
-    }
-
-    if (!startPos.isValid()) {
-        qWarning() << "Invalid or missing drag start position.";
-        event->ignore();
-        resetInteractionState();
-        return;
-    }
-
-    Position endPos = positionFromPoint(event->position().toPoint());
-    if (!endPos.isValid()) {
-        qWarning() << "Invalid drop position.";
-        event->ignore();
-        resetInteractionState();
-        return;
-    }
-
-    Piece* piece = chessModel->getPiece(startPos.row, startPos.col);
-    bool isValidDrop = false;
-    if (piece && piece->isWhite == chessModel->isWhiteToMove()) {
-        auto validMoves = chessModel->getValidMoves(startPos);
-        isValidDrop = std::any_of(validMoves.begin(), validMoves.end(),
-                                  [&](const Position& p) { return p == endPos; });
-    }
-
-    if (isValidDrop) {
-        Move move(startPos, endPos);
-        qDebug() << "Drag Move Attempted:" << QString::fromStdString(Utils::moveToSAN(move, *chessModel));
-        emit moveAttempted(move);
-        event->acceptProposedAction();
-    } else {
-        qDebug() << "Invalid drop move from" << QString::fromStdString(Utils::positionToString(startPos))
-                 << "to" << QString::fromStdString(Utils::positionToString(endPos));
-        event->ignore();
-    }
-
-    resetInteractionState();
+    interactionHandler->handleDrop(event);
 }

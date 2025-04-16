@@ -7,10 +7,12 @@
 #include "model/pieces/Piece.h"
 #include "Position.h"
 #include "Move.h"
+#include "core/FenUtils.h"
 
 class Piece;
 
 class ChessModel {
+friend class FenUtils; 
 private:
     Piece* board[8][8];
     bool whiteToMove;
@@ -26,17 +28,16 @@ private:
     std::vector<Move> moveHistory;      
 
     // Private Helper Methods
-    void clearBoard();
-    Piece* createPiece(char type, bool isWhite);
-    Position findKing(bool white) const;
-    bool isSquareAttacked(Position square, bool byWhite) const;
-    void updateCastlingRights(const Move& move, Piece* movedPiece, Piece* capturedPiece);
-    void updateEnPassantTarget(const Move& move, Piece* movedPiece);
     bool isMoveLegal(const Move& move);
     void updateCurrentValidMoves();
     void updateGameStatus();
+    void updateCastlingRights(const Move& move, Piece* movedPiece, Piece* capturedPiece);    
+    void updateEnPassantTarget(const Move& move, Piece* movedPiece);
+    Position findKing(bool white) const;
+    bool isSquareAttacked(Position square, bool byWhite) const;
+    
+    void clearBoard();
     void clearCapturedPieces();
-    std::string generateFEN() const;
 
 
 public:
@@ -45,21 +46,20 @@ public:
 
     void setupStartingPosition();
     void setupFromFEN(const std::string& fen);
-
+    std::string getCurrentFEN() const;
     Piece* getPiece(int row, int col) const;
     bool isWhiteToMove() const;
     void setWhiteToMove(bool white);
     Position* getEnPassantTarget() const;
-    bool getCastlingRight(int index) const;
+    bool getCastlingRight(int index) const;    
+    const std::vector<Piece*>& getCapturedPieces(bool capturedByWhitePlayer) const; 
+    std::vector<Position> getValidMoves(Position pos) const;    
+    bool makeMove(const Move& move);
+    bool isInCheck() const;
     bool getIsCheckmate() const { return isCheckmate; }
     bool getIsStalemate() const { return isStalemate; }
     bool isGameOver() const { return isCheckmate || isStalemate; }
-    bool isInCheck() const;
-    const std::vector<Piece*>& getCapturedPieces(bool capturedByWhitePlayer) const; 
     const std::vector<Move>& getMoveHistory() const { return moveHistory; } 
-    std::vector<Position> getValidMoves(Position pos) const;
-    bool makeMove(const Move& move);
-    std::string getCurrentFEN() const;
 };
 
 #endif // CHESS_MODEL_H

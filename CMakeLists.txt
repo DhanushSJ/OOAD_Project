@@ -13,10 +13,12 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Sql)
 set(PROJECT_SOURCES
     src/main.cpp
     # GUI
+    src/gui/BoardInteractionHandler.cpp
     src/gui/CapturedPiecesWidget.cpp
     src/gui/ChessBoardWidget.cpp
-    src/gui/ChessView.cpp       
-    src/gui/DrawingUtils.cpp   
+    src/gui/ChessView.cpp
+    src/gui/DrawingUtils.cpp
+    src/gui/GameLoadDialog.cpp
     src/gui/MainWindow.cpp
     src/gui/WelcomeDialog.cpp
     # Model
@@ -34,18 +36,21 @@ set(PROJECT_SOURCES
     src/model/pieces/Rook.cpp
     # Controller
     src/controller/ChessController.cpp
-    # Core/Utils
+    # Core
+    src/core/FenUtils.cpp
     src/core/Utils.cpp
 )
 
 # Define header files (Optional but good practice for IDEs and AUTOMOC)
 set(PROJECT_HEADERS
     # GUI
+    src/gui/BoardInteractionHandler.h
     src/gui/CapturedPiecesWidget.h
     src/gui/ChessBoardWidget.h
-    src/gui/ChessView.h        
-    src/gui/Constants.h     
-    src/gui/DrawingUtils.h   
+    src/gui/ChessView.h
+    src/gui/Constants.h
+    src/gui/DrawingUtils.h
+    src/gui/GameLoadDialog.h
     src/gui/MainWindow.h
     src/gui/WelcomeDialog.h
     # Model
@@ -63,7 +68,8 @@ set(PROJECT_HEADERS
     src/model/pieces/Rook.h
     # Controller
     src/controller/ChessController.h
-    # Core/Utils
+    # Core
+    src/core/FenUtils.h
     src/core/Utils.h
 )
 

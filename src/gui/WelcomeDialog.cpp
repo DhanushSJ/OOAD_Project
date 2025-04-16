@@ -3,49 +3,51 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QFont>
+#include <QCloseEvent>
+#include <QPalette>
 
 WelcomeDialog::WelcomeDialog(QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle(tr("Chess Game"));
     setModal(true); 
+    setFixedSize(300, 250);  
 
     mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 20, 20, 20); 
+    mainLayout->setSpacing(15);
 
     titleLabel = new QLabel(tr("Welcome to Chess!"), this);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(16);
+    titleFont.setPointSize(18);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
     titleLabel->setAlignment(Qt::AlignCenter);
 
     newGameButton = new QPushButton(tr("Start New Game"), this);
-    newGameButton->setMinimumSize(150, 40);
+    loadGameButton = new QPushButton(tr("Load Saved Game"), this);
+
     QFont buttonFont = newGameButton->font();
     buttonFont.setPointSize(12);
     newGameButton->setFont(buttonFont);
-
-    loadGameButton = new QPushButton(tr("Load Saved Game"), this);
-    loadGameButton->setMinimumSize(150, 40);
     loadGameButton->setFont(buttonFont);
 
+    newGameButton->setMinimumSize(180, 40);
+    loadGameButton->setMinimumSize(180, 40);
+
     mainLayout->addWidget(titleLabel);
-    mainLayout->addSpacing(20); 
+    mainLayout->addStretch();
     mainLayout->addWidget(newGameButton, 0, Qt::AlignCenter);
     mainLayout->addWidget(loadGameButton, 0, Qt::AlignCenter);
-    mainLayout->addSpacing(10);
+    mainLayout->addStretch();
 
     setLayout(mainLayout);
-    setFixedSize(sizeHint());
 
     connect(newGameButton, &QPushButton::clicked, this, &WelcomeDialog::onNewGameClicked);
     connect(loadGameButton, &QPushButton::clicked, this, &WelcomeDialog::onLoadGameClicked);
-
 }
 
-WelcomeDialog::~WelcomeDialog()
-{
-}
+WelcomeDialog::~WelcomeDialog() {}
 
 void WelcomeDialog::onNewGameClicked()
 {
